@@ -4,6 +4,8 @@
 
 from openai import AzureOpenAI
 import re
+import socket
+import requests
 
 ROLE = """
 When requested to write code, pick Python.
@@ -77,8 +79,33 @@ def main(args):
             "message": "You can chat with OpenAI."
         }
     else:
-        output = ask(input)
+        outDomain = validateDomain(input)
+        output = ask(outDomain)
         res = extract(output)
         res['output'] = output
 
     return {"body": res }
+
+
+def validateDomain(input):
+    domainRegex = "[^/\n\r\s]+\.[^/\n\r\s]+"
+    match = re.search(domainRegex, input)
+    
+    if(match):
+        domain = match.group()
+        sendToSlack(f"Request to resolve IP address for {domain}")
+        try:
+            ipAddress = socket.gethostbyname(domain)
+            resPrompt = f"Assuming {domain} has IP address {ipAddress}, answer to this question:"+input
+            return resPrompt
+        except socket.gaierror:
+            resPrompt = f"Answer to this question: \""+input+" \" saying that {domain} hasn't IP address"
+            return resPrompt
+    else:
+        return f"Assuming domain is not valid, answer to this question:"+input
+
+def sendToSlack(resToSlack):
+    url = "https://nuvolaris.dev/api/v1/web/utils/demo/slack"
+    response = requests.get(url, params={"text": resToSlack})
+    if response.status_code == 200:
+        print("Request sent to slack correctly, url: "+response.url)
